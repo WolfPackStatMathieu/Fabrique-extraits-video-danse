@@ -23,9 +23,12 @@ def select_file(prompt, initial_dir):
 
 
 def convert_to_seconds(time_str):
-    """Converts a string in format MM:SS into seconds."""
-    m, s = re.split(':', time_str)
-    return int(m) * 60 + int(s)
+    """Converts a string in format MM:SS or MM:SS.SS into seconds."""
+    parts = time_str.split(':')
+    minutes = int(parts[0])
+    seconds = float(parts[1])
+    return minutes * 60 + seconds
+
 
 def lire_csv(fichier):
     """Read the lines from the CSV file and returns the title of the passage, start and end times."""
@@ -35,8 +38,8 @@ def lire_csv(fichier):
             yield row['titre_passage'], row['debut'], row['fin']
 
 # Specify default paths
-default_video_path = "C:/Users/mathi/Videos/Fabrique à gif"
-default_csv_path = "C:/Users/mathi/Videos/Fabrique à gif"
+default_video_path = "C:/Users/mathi/Videos/Fabrique extraits video danse"
+default_csv_path = "C:/Users/mathi/Videos/Fabrique extraits video danse"
 
 # Ask the user for the path of the video
 chemin_video = select_file("Veuillez sélectionner le fichier vidéo"
@@ -67,24 +70,30 @@ for titre_passage, debut, fin in lire_csv(nom_fichier_csv):
 
     # Extract the passage from the video
     temp_file_name = f"{titre_passage}_temp.mp4"
-    ffmpeg_extract_subclip(chemin_video, start_time, end_time, targetname=temp_file_name)
+    try:
+        ffmpeg_extract_subclip(chemin_video, start_time, end_time, targetname=temp_file_name)
 
-    # Load the temporary clip and cut it again to the exact time range
-    clip = VideoFileClip(temp_file_name).subclip(0, end_time - start_time)
+        # Load the temporary clip and cut it again to the exact time range
+        clip = VideoFileClip(temp_file_name).subclip(0, end_time - start_time)
 
-    # Convert the passage to mp4 with reduced bitrate
-    mp4_file_name = f"{titre_passage}.mp4"
-    clip = clip.resize(width=1080)  # reduce resolution if necessary
-    clip.write_videofile(mp4_file_name, codec='libx264', audio_codec='aac', bitrate="1200k")  # specify the codec and bitrate
+        # Convert the passage to mp4 with reduced bitrate
+        mp4_file_name = f"{titre_passage}.mp4"
+        clip = clip.resize(width=1080)  # reduce resolution if necessary
+        clip.write_videofile(mp4_file_name, codec='libx264', audio_codec='aac', bitrate="1200k")  # specify the codec and bitrate
+    except Exception as e:
+        print(f"Error occurred while processing passage: {titre_passage}")
+        print(f"Error message: {str(e)}")
+    finally:
+        # Close the clip to free up resources
+        if 'clip' in locals():
+            clip.close()
 
-    # Close the clip to free up resources
-    clip.close()
 
     # Add the name of the temporary file to the list
     temp_files.append(temp_file_name)
 
     # Add the size of the mp4 to the total size
-    total_size += os.path.getsize(mp4_file_name)
+    total_size += os.path.getsize(temp_file_name)
 
 # Delete all temporary .mp4 files
 for temp_file in temp_files:
