@@ -79,7 +79,9 @@ for titre_passage, debut, fin in lire_csv(nom_fichier_csv):
         # Convert the passage to mp4 with reduced bitrate
         mp4_file_name = f"{titre_passage}.mp4"
         clip = clip.resize(width=1080)  # reduce resolution if necessary
-        clip.write_videofile(mp4_file_name, codec='libx264', audio_codec='aac', bitrate="1200k")  # specify the codec and bitrate
+        # clip.write_videofile(mp4_file_name, codec='libx264', audio_codec='aac', bitrate="1200k")  # specify the codec and bitrate
+        clip.write_videofile(mp4_file_name, codec='mpeg4', audio_codec='aac', bitrate="1200k")
+
     except Exception as e:
         print(f"Error occurred while processing passage: {titre_passage}")
         print(f"Error message: {str(e)}")
