@@ -9,6 +9,33 @@ from tkinter.filedialog import askopenfilename
 import re
 from unidecode import unidecode
 
+
+def add_index_to_empty_titles(file):
+    """Add an index to empty titre_passage fields in the CSV."""
+    rows = []
+    passage_index = 1
+
+    with open(file, 'r') as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            if not row['titre_passage'].strip():
+                row['titre_passage'] = f"{file}_{passage_index}"
+                passage_index += 1
+            rows.append(row)
+
+    # Writing the modified rows back to the file
+    with open(file, 'w', newline='') as f:
+        fieldnames = ['titre_passage', 'debut', 'fin']  # assuming these are the field names
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        for row in rows:
+            title = row.get("titre_passage", "").strip()
+            start = row.get("debut", "").strip()
+            end = row.get("fin", "").strip()
+            row = {'titre_passage': title, 'debut': start, 'fin': end}
+            print(row)
+            writer.writerow(row)
+
 def clean_file_name(file_name):
     """Remove invalid characters from a file name."""
     file_name = unidecode(file_name)  # replace accented characters with non-accented equivalent
@@ -21,6 +48,32 @@ def select_file(prompt, initial_dir):
     filename = askopenfilename(initialdir=initial_dir, title=prompt)  # show an "Open" dialog box and return the path to the selected file
     return filename
 
+def is_format_final(csv_path):
+    with open(csv_path, 'r') as f:
+        reader = csv.reader(f)
+        header = next(reader, None)  # Lit l'en-tête (première ligne)
+        if header == ['titre_passage', 'debut', 'fin']:
+            return True
+    return False
+
+def transform_csv(input_file, output_file):
+    # 1. Lire le contenu du fichier source
+    with open(input_file, 'r') as file:
+        content = file.readlines()
+
+    # 2. Vérifiez le format (vous pouvez ajouter des fonctions de vérification ici)
+    # Par exemple, vérifiez s'il a déjà les en-têtes souhaités.
+    if content[0].strip() == "titre_passage,debut,fin":
+        return  # Le fichier est déjà au bon format
+
+    # 3. Effectuez la transformation
+    transformed_content = ["titre_passage,debut,fin\n"]
+    for line in content:
+        transformed_content.append("," + line)
+
+    # 4. Écrivez le contenu transformé dans le fichier de destination
+    with open(output_file, 'w') as file:
+        file.writelines(transformed_content)
 
 def convert_to_seconds(time_str):
     """Converts a string in format HH:MM:SS, MM:SS or MM:SS.SS into seconds.
@@ -66,7 +119,7 @@ def is_valid_time_format(time_str):
         optionnel, représentant les minutes.
         :[0-5][0-9] correspond de nouveau à un deux-points suivi d'un nombre à deux chiffres compris entre
         00 et 59, représentant les secondes.
-        (\.[0-9]{1,2})? correspond à une option de fractions de seconde, où un point est suivi d'un ou deux
+        (\.[0-9]{1,2,3})? correspond à une option de fractions de seconde, où un point est suivi d'un ou deux
         chiffres. Le point d'interrogation à la fin signifie que cette partie est optionnelle.
 
     En combinant tout cela, cette fonction vérifie si une chaîne donnée correspond à l'un de ces formats de
@@ -74,7 +127,7 @@ def is_valid_time_format(time_str):
     fractionnaires.
     """
     # Define the regular expression (regex) pattern to match
-    regex = "^(([0-9]{1,2}:[0-5][0-9]:[0-5][0-9])|([0-5]?[0-9]:[0-5][0-9](\.[0-9]{1,2})?))$"
+    regex = "^(([0-9]{1,2}:[0-5][0-9]:[0-5][0-9](\.[0-9]{1,3})?)|([0-5]?[0-9]:[0-5][0-9](\.[0-9]{1,4})?))$"
 
     # Try to match the input string (time_str) with the regex pattern
     # If the input string matches the pattern, the match() function will return a Match object
@@ -132,7 +185,8 @@ def lire_csv(fichier):
         for row in reader:
             yield row['titre_passage'], row['debut'], row['fin']
 
-
+def format_passage_title(index):
+    return str(index).zfill(2)
 
 ############ DEBUT ############
 # Specify default paths
@@ -147,6 +201,14 @@ chemin_video = select_file("Veuillez sélectionner le fichier vidéo"
 nom_fichier_csv = select_file("Veuillez sélectionner le fichier CSV"
                               , default_csv_path)
 
+# Transformez le fichier CSV si nécessaire
+transform_csv(nom_fichier_csv, nom_fichier_csv)
+
+
+# Call the function at the start of your program
+add_index_to_empty_titles(nom_fichier_csv)
+
+
 # Check the format of the CSV file
 check_csv_format(nom_fichier_csv)
 
@@ -155,7 +217,7 @@ temp_files = []
 
 # Initialize total size to 0
 total_size = 0
-
+passage_index = 1  # Initialize the passage index to start from 1
 for titre_passage, debut, fin in lire_csv(nom_fichier_csv):
     # Clean the passage title
     titre_passage = clean_file_name(titre_passage)
@@ -163,8 +225,10 @@ for titre_passage, debut, fin in lire_csv(nom_fichier_csv):
     start_time = convert_to_seconds(debut)
     end_time = convert_to_seconds(fin)
 
+    # Format the passage title with leading zeros
+    formatted_passage_index = format_passage_title(passage_index)
+    temp_file_name = f"{formatted_passage_index}_{titre_passage}_temp.mp4"
     # Extract the passage from the video
-    temp_file_name = f"{titre_passage}_temp.mp4"
     try:
         ffmpeg_extract_subclip(chemin_video, start_time, end_time, targetname=temp_file_name)
 
@@ -172,7 +236,7 @@ for titre_passage, debut, fin in lire_csv(nom_fichier_csv):
         clip = VideoFileClip(temp_file_name).subclip(0, end_time - start_time)
 
         # Convert the passage to mp4 with reduced bitrate
-        mp4_file_name = f"{titre_passage}.mp4"
+        mp4_file_name = f"{formatted_passage_index}_{titre_passage}.mp4"
         clip = clip.resize(width=1080)  # reduce resolution if necessary
         # clip.write_videofile(mp4_file_name, codec='libx264', audio_codec='aac', bitrate="1200k")  # specify the codec and bitrate
         clip.write_videofile(mp4_file_name, codec='mpeg4', audio_codec='aac', bitrate="1200k")
@@ -184,7 +248,7 @@ for titre_passage, debut, fin in lire_csv(nom_fichier_csv):
         # Close the clip to free up resources
         if 'clip' in locals():
             clip.close()
-
+    passage_index += 1
 
     # Add the name of the temporary file to the list
     temp_files.append(temp_file_name)
